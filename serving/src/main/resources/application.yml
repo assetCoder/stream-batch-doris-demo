@@ -1,0 +1,43 @@
+# 内嵌 Tomcat 端口；8080/8081 已被其他 demo 占用，这里用 8082
+server:
+  port: 8082
+
+spring:
+  application:
+    name: doris-demo
+
+  jackson:
+    serialization:
+      # 日期按 ISO-8601 字符串输出，而不是时间戳数字
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null # 值为 null 的字段不输出，响应更干净
+
+# 所有 Doris 连接参数集中在这里
+demo:
+  doris:
+    # FE 地址；环境变量 DORIS_FE_HOST 优先
+    fe-host: ${DORIS_FE_HOST:127.0.0.1}
+    # MySQL 协议端口（JDBC 查询/写入）
+    query-port: ${DORIS_QUERY_PORT:9030}
+    # HTTP 端口（Stream Load 导入）
+    http-port: ${DORIS_HTTP_PORT:8030}
+    # 目标数据库
+    database: ${DORIS_DATABASE:demo}
+    # 账号密码；生产环境请用环境变量或密钥管理系统，不要提交到仓库
+    username: ${DORIS_USERNAME:root}
+    password: ${DORIS_PASSWORD:}
+    # 本地学习默认自动建库建表；生产建议设为 false
+    init-schema: ${DORIS_INIT_SCHEMA:true}
+    # HikariCP 最大连接数
+    max-pool-size: ${DORIS_POOL_SIZE:10}
+    # 获取连接超时（毫秒）
+    connection-timeout-ms: 3000
+    # 是否启用 Stream Load 接口
+    stream-load-enabled: ${DORIS_STREAM_LOAD_ENABLED:true}
+    # Stream Load HTTP 超时（秒）
+    stream-load-timeout-seconds: 60
+
+logging:
+  level:
+    # 只打印本项目的 INFO 日志；需要看 SQL 时把下面改成 DEBUG
+    com.example.doris: INFO

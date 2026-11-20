@@ -1,0 +1,82 @@
+# Kafka + Flink 本地编排。
+#
+# Doris 不放在这里：FE/BE 镜像与 CPU 架构、fe.conf/be.conf 强相关，
+# 不同机器差异很大。请使用你已有的 Doris，或按官方 Docker 文档单独启动；
+# 然后通过 DORIS_FENODES 指向它（Mac 用 host.docker.internal）。
+services:
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: sbd-kafka
+    ports:
+      - "29092:29092"      # 宿主机 producer 用 127.0.0.1:29092
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: CONTROLLER://:9093,PLAINTEXT://:9092,PLAINTEXT_HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  jobmanager:
+    image: flink:2.2.1-scala_2.12
+    container_name: sbd-jobmanager
+    command: jobmanager
+    ports:
+      - "8085:8081"       # 避开本机已有的 8081
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        jobmanager.memory.process.size: 1600m
+        parallelism.default: 1
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  taskmanager:
+    image: flink:2.2.1-scala_2.12
+    container_name: sbd-taskmanager
+    command: taskmanager
+    depends_on:
+      - jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2
+        taskmanager.memory.process.size: 1728m
+        parallelism.default: 1
+
+  flink-submit:
+    image: flink:2.2.1-scala_2.12
+    container_name: sbd-flink-submit
+    depends_on:
+      - jobmanager
+    volumes:
+      - ./flink-job/target:/opt/flink/usrlib:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        flink run -d -m jobmanager:8081 \
+          -c com.example.streaming.OrderStreamingJob \
+          /opt/flink/usrlib/flink-order-job-1.0.0.jar
+        sleep 3600
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_TOPIC: order-events
+      DORIS_FENODES: ${DORIS_FENODES:-host.docker.internal:8030}
+      DORIS_DATABASE: demo
+      DORIS_TABLE: order_events
+      DORIS_USERNAME: ${DORIS_USERNAME:-root}
+      DORIS_PASSWORD: ${DORIS_PASSWORD:-}

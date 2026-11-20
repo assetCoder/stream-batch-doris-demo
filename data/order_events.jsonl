@@ -1,0 +1,5 @@
+{"event_id": 2001, "user_id": 101, "product_id": 9001, "category": "数码", "amount": 2999.0, "quantity": 1, "channel": "douyin", "event_time": "2026-11-20 10:00:00", "dt": "2026-11-20"}
+{"event_id": 2002, "user_id": 102, "product_id": 9002, "category": "家电", "amount": 899.5, "quantity": 1, "channel": "wechat", "event_time": "2026-11-20 11:00:00", "dt": "2026-11-20"}
+{"event_id": 2003, "user_id": 101, "product_id": 9003, "category": "图书", "amount": 59.9, "quantity": 2, "channel": "douyin", "event_time": "2026-11-20 12:00:00", "dt": "2026-11-20"}
+{"event_id": 2004, "user_id": 103, "product_id": 9001, "category": "数码", "amount": 2999.0, "quantity": 1, "channel": "organic", "event_time": "2026-11-21 09:00:00", "dt": "2026-11-21"}
+{"event_id": 2005, "user_id": 104, "product_id": 9002, "category": "家电", "amount": 100.0, "quantity": 1, "channel": "wechat", "event_time": "2026-11-21 10:00:00", "dt": "2026-11-21"}

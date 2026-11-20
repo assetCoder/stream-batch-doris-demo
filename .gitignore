@@ -1,0 +1,21 @@
+# Java / Maven
+target/
+**/target/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Python
+.venv*/
+__pycache__/
+*.pyc
+.pytest_cache/
+spark-warehouse/
+derby.log
+
+# 本地数据/产物
+data/*.parquet
+*.log
