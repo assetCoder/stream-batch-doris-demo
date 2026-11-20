@@ -59,6 +59,61 @@ stream-batch-doris-demo/
 
 > 版本矩阵比“每个都选最新”重要。Flink 2.3 + Spark 4.3 看起来新，但 Kafka/Spark Doris connector 未必有对应构件，混用会直接 `NoSuchMethodError`。
 
+## 技术选型参照
+
+> 原文：[引擎选型对照：Hive/Spark/Flink/OLAP](https://docs.qiqicto.com/dwh/engine-selection.html)
+>
+> 说明：抓取时该页面返回 **502 Bad Gateway**，暂时无法核对全文。下面先按页面主题，把“选型维度 + 本项目的取舍”整理成可复用的检查表；等原站恢复后，再对照原文补充/修正结论。
+
+### 一张表看懂四类引擎
+
+| 维度 | Hive | Spark | Flink | Doris |
+| --- | --- | --- | --- | --- |
+| 核心定位 | 离线数仓 / SQL on Hadoop | 通用批处理、ETL、ML | 有状态流处理 | MPP OLAP / 统一查询服务 |
+| 典型延迟 | 分钟 ~ 小时 | 秒 ~ 分钟（微批） | 毫秒 ~ 秒 | 亚秒 ~ 秒 |
+| 吞吐/规模 | PB 级，吞吐高 | PB 级，吞吐高 | TB ~ PB，状态大 | TB ~ 百 TB，单集群 |
+| 数据更新 | 分区重写 | 分区重写 / 湖表 | 流式 upsert | Unique Key upsert |
+| 高并发点查 | 不擅长 | 一般 | 不擅长 | 强项 |
+| 事务/一致性 | 弱 | 弱（靠湖表） | checkpoint + 2PC | 导入事务 + label |
+| 运维成本 | Hadoop 体系重 | Spark 集群 | Flink 集群 + 状态 | FE/BE + compaction |
+| 最适合 | T+1 离线报表 | 回补、复杂 Join、ML | 实时 ETL、风控、告警 | 实时明细 + 报表服务 |
+
+### 本项目为什么这样选
+
+- **Flink 做实时接入**：Kafka 订单事件需要低延迟清洗、时间转换、脏数据过滤；Flink 的 checkpoint + Doris Connector 2PC 能保证“至少一次/精确一次”的导入语义。
+- **Spark 做离线聚合/回补**：日/渠道 ADS 需要可重跑、可全量重算；Spark 的批处理吞吐和 SQL 生态更合适，读 Doris DWD 后按 `dt` 重算。
+- **Doris 做存储与服务**：明细和 ADS 都落在 Doris，Spring Boot/BI 只查 Doris，避免把结果再同步回 MySQL；Unique Key 让 Spark 重跑天然幂等。
+- **Hive 没有进主链路**：示例数据量小；真实项目里 Hive/S3/Parquet 更适合放冷数据，Spark 读湖、算完只把结果写 Doris，避免大扫描打爆 Doris。
+- **不用 Spark 做实时**：微批延迟和持续运行成本不适合秒级链路；**不用 Flink 做全量回补**：状态和吞吐不如 Spark 批任务直接。
+- **不让 Flink/Spark 互调**：两者通过 Doris 表交接，任何一方重跑都不影响另一方。
+
+### 选型时按顺序问 8 个问题
+
+1. **延迟 SLA**：秒级/分钟级/T+1？先排除不满足的引擎。
+2. **数据量级与保留周期**：TB 还是 PB？决定 Doris 单集群是否够，还是需要湖仓。
+3. **更新语义**：只追加、按主键 upsert，还是按分区覆盖？对应 Duplicate/Unique/重写分区。
+4. **查询并发**：BI 高并发点查选 Doris；大扫描/ML 选 Spark。
+5. **计算复杂度**：复杂 Join、窗口、CEP 分别更适合 Spark/Flink。
+6. **团队与运维**：有没有 Flink/Spark/Doris 的运维能力，比“引擎参数”更影响落地。
+7. **生态与连接器**：Flink/Spark 与 Doris 的 connector 是否与引擎大版本对齐（本项目就因此选 Flink 2.2 而非 2.3）。
+8. **失败恢复**：Flink checkpoint、Spark 重跑、Doris label 幂等，三者要能组合成可恢复的链路。
+
+### 持续学习建议
+
+读原文时，建议对照本项目逐条验证：
+
+- 原文对 Hive/Spark/Flink/OLAP 的边界条件，是否适用于你的数据量；
+- 原文的选型结论是否假设了某种存储/调度（HDFS、Kafka、YARN/K8s）；
+- 把“延迟、吞吐、并发、成本、运维”换成你团队的真实数字，再重跑一遍决策；
+- 每引入一个新引擎，先问：**它负责哪一层、谁写哪张表、失败后怎么重跑**。
+
+相关官方文档：
+
+- [Doris Flink 导入](https://doris.apache.org/docs/4.x/data-operate/import/data-source/flink/)
+- [Doris Spark Connector](https://doris.apache.org/docs/4.x/connection-integration/data-integration/spark-doris-connector/)
+- [Flink 2.2 文档](https://nightlies.apache.org/flink/flink-docs-release-2.2/)
+- [Spark 4.1 文档](https://spark.apache.org/docs/4.1.4/)
+
 ## 数据分层与写入方
 
 | 表 | 写入方 | 模型 | 说明 |
